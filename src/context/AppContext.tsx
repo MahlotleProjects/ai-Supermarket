@@ -128,13 +128,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const fetchSales = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: salesData, error: salesError } = await supabase
         .from('sales')
-        .select('*')
+        .select(`
+          id,
+          created_at,
+          total_amount,
+          sale_items (
+            id,
+            product_id,
+            quantity,
+            sale_price
+          )
+        `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setSales(data || []);
+      if (salesError) throw salesError;
+      setSales(salesData || []);
     } catch (error: any) {
       toast.error('Error fetching sales: ' + error.message);
     }
@@ -222,29 +232,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addSale = async (sale: { product_id: string; quantity: number; sale_price: number; created_at: string }) => {
+  const addSale = async (saleItem: { product_id: string; quantity: number; sale_price: number; created_at: string }) => {
     try {
-      // Insert the sale record
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Start a transaction by creating the sale record first
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
-        .insert([{
-          created_at: sale.created_at,
-          total_amount: sale.quantity * sale.sale_price
-        }])
+        .insert({
+          total_amount: saleItem.quantity * saleItem.sale_price,
+          created_at: saleItem.created_at,
+          user_id: user.id
+        })
         .select()
         .single();
 
       if (saleError) throw saleError;
 
-      // Insert the sale item
+      // Then create the sale item
       const { error: itemError } = await supabase
         .from('sale_items')
-        .insert([{
+        .insert({
           sale_id: saleData.id,
-          product_id: sale.product_id,
-          quantity: sale.quantity,
-          sale_price: sale.sale_price
-        }]);
+          product_id: saleItem.product_id,
+          quantity: saleItem.quantity,
+          sale_price: saleItem.sale_price
+        });
 
       if (itemError) throw itemError;
 
@@ -252,27 +266,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data: product } = await supabase
         .from('products')
         .select('quantity')
-        .eq('id', sale.product_id)
+        .eq('id', saleItem.product_id)
         .single();
 
       if (product) {
-        const newQuantity = product.quantity - sale.quantity;
+        const newQuantity = product.quantity - saleItem.quantity;
         
-        await supabase
+        const { error: updateError } = await supabase
           .from('products')
           .update({ 
             quantity: newQuantity,
             last_sale_date: new Date().toISOString()
           })
-          .eq('id', sale.product_id);
+          .eq('id', saleItem.product_id);
+
+        if (updateError) throw updateError;
 
         if (newQuantity <= 15) {
-          await generateStockRecommendation(sale.product_id, newQuantity);
+          await generateStockRecommendation(saleItem.product_id, newQuantity);
         }
       }
 
       toast.success('Sale recorded successfully!');
-      
       await fetchProducts();
       await fetchSales();
     } catch (error: any) {
