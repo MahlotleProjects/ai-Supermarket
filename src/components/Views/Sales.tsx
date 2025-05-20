@@ -219,8 +219,8 @@ const Sales: React.FC = () => {
       // Record each sale item
       for (const item of saleItems) {
         await addSale({
-          created_at: new Date(currentItem.created_at).toISOString(),
-          ...item
+          ...item,
+          created_at: currentItem.created_at
         });
       }
       
