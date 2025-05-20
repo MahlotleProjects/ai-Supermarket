@@ -356,164 +356,164 @@ const Sales: React.FC = () => {
             </table>
           </div>
         </div>
-        
-        {/* Sales Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Record New Sale</h2>
+      </div>
+      
+      {/* Sales Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Record New Sale</h2>
+            
+            <form onSubmit={handleSubmit}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date
+                </label>
+                <input
+                  type="date"
+                  name="created_at"
+                  value={currentItem.created_at}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Product
+                </label>
+                <select
+                  name="product_id"
+                  value={currentItem.product_id}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select a product</option>
+                  {products
+                    .filter(p => p.quantity > 0 && calculateDaysUntilExpiry(p.expiry_date) > 0)
+                    .map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} - {formatCurrency(product.price)} ({product.quantity} in stock)
+                      </option>
+                    ))}
+                </select>
+              </div>
               
-              <form onSubmit={handleSubmit}>
-                <div className="mb-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Date
+                    Quantity
                   </label>
                   <input
-                    type="date"
-                    name="created_at"
-                    value={currentItem.created_at}
+                    type="number"
+                    name="quantity"
+                    value={currentItem.quantity}
                     onChange={handleInputChange}
                     required
+                    min="1"
+                    max={
+                      currentItem.product_id
+                        ? products.find(p => p.id === currentItem.product_id)?.quantity || 1
+                        : 1
+                    }
                     className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product
-                  </label>
-                  <select
-                    name="product_id"
-                    value={currentItem.product_id}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select a product</option>
-                    {products
-                      .filter(p => p.quantity > 0 && calculateDaysUntilExpiry(p.expiry_date) > 0)
-                      .map(product => (
-                        <option key={product.id} value={product.id}>
-                          {product.name} - {formatCurrency(product.price)} ({product.quantity} in stock)
-                        </option>
-                      ))}
-                  </select>
-                </div>
                 
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quantity
-                    </label>
-                    <input
-                      type="number"
-                      name="quantity"
-                      value={currentItem.quantity}
-                      onChange={handleInputChange}
-                      required
-                      min="1"
-                      max={
-                        currentItem.product_id
-                          ? products.find(p => p.id === currentItem.product_id)?.quantity || 1
-                          : 1
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sale Price (per unit)
-                    </label>
-                    <input
-                      type="number"
-                      name="sale_price"
-                      value={currentItem.sale_price}
-                      onChange={handleInputChange}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sale Price (per unit)
+                  </label>
+                  <input
+                    type="number"
+                    name="sale_price"
+                    value={currentItem.sale_price}
+                    onChange={handleInputChange}
+                    required
+                    min="0"
+                    step="0.01"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
                 </div>
+              </div>
 
-                <div className="flex justify-end gap-2 mb-4">
-                  <button
-                    type="button"
-                    onClick={addItemToSale}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    disabled={!currentItem.product_id || currentItem.quantity < 1}
-                  >
-                    Add Item
-                  </button>
-                </div>
+              <div className="flex justify-end gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={addItemToSale}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={!currentItem.product_id || currentItem.quantity < 1}
+                >
+                  Add Item
+                </button>
+              </div>
 
-                {/* Sale Items List */}
-                {saleItems.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="font-medium text-gray-900 mb-2">Sale Items</h3>
-                    <div className="border rounded-md divide-y">
-                      {saleItems.map(item => {
-                        const product = products.find(p => p.id === item.product_id);
-                        return (
-                          <div key={item.product_id} className="p-3 flex items-center justify-between">
-                            <div>
-                              <p className="font-medium">{product?.name}</p>
-                              <p className="text-sm text-gray-600">
-                                {item.quantity} x {formatCurrency(item.sale_price)}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <p className="font-medium">
-                                {formatCurrency(item.quantity * item.sale_price)}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => removeItemFromSale(item.product_id)}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
+              {/* Sale Items List */}
+              {saleItems.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="font-medium text-gray-900 mb-2">Sale Items</h3>
+                  <div className="border rounded-md divide-y">
+                    {saleItems.map(item => {
+                      const product = products.find(p => p.id === item.product_id);
+                      return (
+                        <div key={item.product_id} className="p-3 flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{product?.name}</p>
+                            <p className="text-sm text-gray-600">
+                              {item.quantity} x {formatCurrency(item.sale_price)}
+                            </p>
                           </div>
-                        );
-                      })}
-                      <div className="p-3 bg-gray-50 flex justify-between font-medium">
-                        <span>Total</span>
-                        <span>
-                          {formatCurrency(
-                            saleItems.reduce((sum, item) => sum + (item.quantity * item.sale_price), 0)
-                          )}
-                        </span>
-                      </div>
+                          <div className="flex items-center gap-4">
+                            <p className="font-medium">
+                              {formatCurrency(item.quantity * item.sale_price)}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => removeItemFromSale(item.product_id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="p-3 bg-gray-50 flex justify-between font-medium">
+                      <span>Total</span>
+                      <span>
+                        {formatCurrency(
+                          saleItems.reduce((sum, item) => sum + (item.quantity * item.sale_price), 0)
+                        )}
+                      </span>
                     </div>
                   </div>
-                )}
-                
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                    onClick={() => {
-                      setShowForm(false);
-                      setSaleItems([]);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    disabled={saleItems.length === 0}
-                  >
-                    Record Sale
-                  </button>
                 </div>
-              </form>
-            </div>
+              )}
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  onClick={() => {
+                    setShowForm(false);
+                    setSaleItems([]);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  disabled={saleItems.length === 0}
+                >
+                  Record Sale
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
       
       {/* Recent Sales */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
