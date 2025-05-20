@@ -14,7 +14,7 @@ interface AppContextType {
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   updateProduct: (product: Product) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
-  addSale: (saleItems: SaleItem[], date: string) => Promise<void>;
+  addSale: (sale: { product_id: string; quantity: number; sale_price: number; created_at: string }) => Promise<void>;
   markRecommendationAsRead: (id: string) => Promise<void>;
   markAllRecommendationsAsRead: () => Promise<void>;
   sendChatMessage: (content: string) => void;
@@ -222,51 +222,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addSale = async (saleItems: SaleItem[], date: string) => {
+  const addSale = async (sale: { product_id: string; quantity: number; sale_price: number; created_at: string }) => {
     try {
-      const totalAmount = saleItems.reduce((sum, item) => sum + (item.quantity * item.sale_price), 0);
-
+      // Insert the sale record
       const { data: saleData, error: saleError } = await supabase
         .from('sales')
         .insert([{
-          created_at: date,
-          total_amount: totalAmount
+          created_at: sale.created_at,
+          total_amount: sale.quantity * sale.sale_price
         }])
         .select()
         .single();
 
       if (saleError) throw saleError;
 
-      const { error: itemsError } = await supabase
+      // Insert the sale item
+      const { error: itemError } = await supabase
         .from('sale_items')
-        .insert(
-          saleItems.map(item => ({
-            sale_id: saleData.id,
-            ...item
-          }))
-        );
+        .insert([{
+          sale_id: saleData.id,
+          product_id: sale.product_id,
+          quantity: sale.quantity,
+          sale_price: sale.sale_price
+        }]);
 
-      if (itemsError) throw itemsError;
+      if (itemError) throw itemError;
 
-      for (const item of saleItems) {
-        const { data: product } = await supabase
-          .from('products')
-          .select('quantity')
-          .eq('id', item.product_id)
-          .single();
+      // Update product quantity
+      const { data: product } = await supabase
+        .from('products')
+        .select('quantity')
+        .eq('id', sale.product_id)
+        .single();
 
-        if (!product) continue;
-
+      if (product) {
+        const newQuantity = product.quantity - sale.quantity;
+        
         await supabase
           .from('products')
           .update({ 
-            quantity: product.quantity - item.quantity,
+            quantity: newQuantity,
             last_sale_date: new Date().toISOString()
           })
-          .eq('id', item.product_id);
+          .eq('id', sale.product_id);
 
-        if (product.quantity - item.quantity <= 15) {
-          await generateStockRecommendation(item.product_id, product.quantity - item.quantity);
+        if (newQuantity <= 15) {
+          await generateStockRecommendation(sale.product_id, newQuantity);
         }
       }
 
