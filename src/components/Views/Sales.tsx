@@ -8,7 +8,9 @@ import {
   BarChart2,
   Plus,
   AlertCircle,
-  Trash2
+  Trash2,
+  ChevronRight,
+  ArrowRight
 } from 'lucide-react';
 import StatsCard from '../UI/StatsCard';
 import { 
@@ -53,6 +55,7 @@ const Sales: React.FC = () => {
     sale_price: 0,
     created_at: new Date().toISOString().split('T')[0]
   });
+  const [showAllSales, setShowAllSales] = useState(false);
   
   // Filter sales by date range
   const filteredSales = useMemo(() => {
@@ -68,64 +71,46 @@ const Sales: React.FC = () => {
   
   // Calculate sales metrics
   const metrics = useMemo(() => {
-    const totalSales = filteredSales.reduce((sum, sale) => {
-      return sum + (sale.sale_price * sale.quantity);
-    }, 0);
+    const totalSales = filteredSales.reduce((sum, sale) => sum + Number(sale.total_amount), 0);
     
     const totalItems = filteredSales.reduce((sum, sale) => {
-      return sum + sale.quantity;
+      return sum + sale.sale_items.reduce((itemSum, item) => itemSum + item.quantity, 0);
     }, 0);
     
     const totalProfit = filteredSales.reduce((sum, sale) => {
-      const product = products.find(p => p.id === sale.product_id);
-      if (!product) return sum;
-      
-      return sum + calculateProfit(product.cost_price, sale.sale_price, sale.quantity);
+      return sum + sale.sale_items.reduce((itemSum, item) => {
+        const product = products.find(p => p.id === item.product_id);
+        if (!product) return itemSum;
+        return itemSum + calculateProfit(product.cost_price, item.sale_price, item.quantity);
+      }, 0);
     }, 0);
     
-    // Create sales by day
-    const salesByDay: Record<string, number> = {};
-    filteredSales.forEach(sale => {
-      const dateKey = new Date(sale.created_at).toISOString().split('T')[0];
-      const amount = sale.sale_price * sale.quantity;
-      
-      if (salesByDay[dateKey]) {
-        salesByDay[dateKey] += amount;
-      } else {
-        salesByDay[dateKey] = amount;
-      }
-    });
-    
     // Get top selling products
-    const productSales: Record<string, number> = {};
+    const productSales: Record<string, { quantity: number; revenue: number }> = {};
     filteredSales.forEach(sale => {
-      if (productSales[sale.product_id]) {
-        productSales[sale.product_id] += sale.quantity;
-      } else {
-        productSales[sale.product_id] = sale.quantity;
-      }
+      sale.sale_items.forEach(item => {
+        if (!productSales[item.product_id]) {
+          productSales[item.product_id] = { quantity: 0, revenue: 0 };
+        }
+        productSales[item.product_id].quantity += item.quantity;
+        productSales[item.product_id].revenue += item.quantity * item.sale_price;
+      });
     });
     
     const topProducts = Object.entries(productSales)
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1].revenue - a[1].revenue)
       .slice(0, 5)
-      .map(([product_id, quantity]) => {
-        const product = products.find(p => p.id === product_id);
-        return {
-          id: product_id,
-          name: product?.name || 'Unknown Product',
-          quantity,
-          revenue: filteredSales
-            .filter(s => s.product_id === product_id)
-            .reduce((sum, s) => sum + (s.sale_price * s.quantity), 0)
-        };
-      });
+      .map(([productId, stats]) => ({
+        id: productId,
+        name: products.find(p => p.id === productId)?.name || 'Unknown Product',
+        quantity: stats.quantity,
+        revenue: stats.revenue
+      }));
     
     return {
       totalSales,
       totalItems,
       totalProfit,
-      salesByDay,
       topProducts,
       averageSale: totalSales / (filteredSales.length || 1)
     };
@@ -216,12 +201,49 @@ const Sales: React.FC = () => {
     e.preventDefault();
     
     try {
-      // Record each sale item
-      for (const item of saleItems) {
-        await addSale({
-          ...item,
+      // Calculate total amount
+      const totalAmount = saleItems.reduce((sum, item) => {
+        return sum + (item.quantity * item.sale_price);
+      }, 0);
+
+      // Create the sale record
+      const { data: saleData, error: saleError } = await supabase
+        .from('sales')
+        .insert({
+          total_amount: totalAmount,
           created_at: currentItem.created_at
-        });
+        })
+        .select()
+        .single();
+
+      if (saleError) throw saleError;
+
+      // Create sale items
+      const { error: itemsError } = await supabase
+        .from('sale_items')
+        .insert(
+          saleItems.map(item => ({
+            sale_id: saleData.id,
+            ...item
+          }))
+        );
+
+      if (itemsError) throw itemsError;
+
+      // Update product quantities
+      for (const item of saleItems) {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          const { error: updateError } = await supabase
+            .from('products')
+            .update({ 
+              quantity: product.quantity - item.quantity,
+              last_sale_date: new Date().toISOString()
+            })
+            .eq('id', item.product_id);
+
+          if (updateError) throw updateError;
+        }
       }
       
       setShowForm(false);
@@ -232,8 +254,10 @@ const Sales: React.FC = () => {
         sale_price: 0,
         created_at: new Date().toISOString().split('T')[0]
       });
-    } catch (error) {
-      // Error handling is done in the context
+      
+      toast.success('Sale recorded successfully!');
+    } catch (error: any) {
+      toast.error('Error recording sale: ' + error.message);
     }
   };
   
@@ -517,8 +541,15 @@ const Sales: React.FC = () => {
       
       {/* Recent Sales */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-5 border-b border-gray-200">
+        <div className="p-5 border-b border-gray-200 flex justify-between items-center">
           <h2 className="text-lg font-semibold text-gray-900">Recent Sales</h2>
+          <button
+            onClick={() => setShowAllSales(!showAllSales)}
+            className="text-blue-600 hover:text-blue-800 flex items-center text-sm"
+          >
+            {showAllSales ? 'Show Less' : 'View All'}
+            <ChevronRight size={16} className="ml-1" />
+          </button>
         </div>
         
         <div className="overflow-x-auto">
@@ -526,54 +557,51 @@ const Sales: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sale ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Product
+                  Items
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quantity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Price
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total
+                  Total Amount
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredSales.slice(0, 10).map(sale => {
-                const product = products.find(p => p.id === sale.product_id);
-                
-                return (
-                  <tr key={sale.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{formatDate(sale.created_at)}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {product?.name || 'Unknown Product'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{sale.quantity}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{formatCurrency(sale.sale_price)}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(sale.sale_price * sale.quantity)}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {(showAllSales ? filteredSales : filteredSales.slice(0, 10)).map(sale => (
+                <tr key={sale.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">#{sale.id.slice(0, 8)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{formatDate(sale.created_at)}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">
+                      {sale.sale_items.map(item => {
+                        const product = products.find(p => p.id === item.product_id);
+                        return (
+                          <div key={item.id} className="mb-1">
+                            {product?.name} ({item.quantity} x {formatCurrency(item.sale_price)})
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {formatCurrency(Number(sale.total_amount))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
               
               {filteredSales.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
                     No sales data available for the selected date range
                   </td>
                 </tr>
