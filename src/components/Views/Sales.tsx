@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
 import { 
   ShoppingCart, 
   Calendar, 
